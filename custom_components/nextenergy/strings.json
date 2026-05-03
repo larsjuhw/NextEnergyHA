@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up NextEnergy",
+        "description": "Adds NextEnergy market-price sensors. No login is required — the integration uses the public anonymous endpoints of the customer portal."
+      }
+    },
+    "abort": {
+      "already_configured": "NextEnergy is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NextEnergy options",
+        "data": {
+          "update_interval": "Polling interval (seconds, 900–21600)",
+          "language": "Insight-text language"
+        }
+      }
+    }
+  }
+}
