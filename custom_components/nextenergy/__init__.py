@@ -1,15 +1,26 @@
 """NextEnergy market-price integration."""
 from __future__ import annotations
 
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import NextEnergyCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator = NextEnergyCoordinator(hass, entry)
+    # HA's shared client session uses DummyCookieJar, so cookies the portal
+    # sets during bootstrap would be discarded. Create a dedicated session
+    # with a real CookieJar instead.
+    # unsafe=True so cookies set on bare-IP / unusual domain attributes are
+    # still accepted; the portal is a single trusted host so this is fine.
+    session = async_create_clientsession(
+        hass, cookie_jar=aiohttp.CookieJar(unsafe=True)
+    )
+    coordinator = NextEnergyCoordinator(hass, entry, session)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator

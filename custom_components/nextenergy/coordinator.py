@@ -5,14 +5,14 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 import homeassistant.util.dt as dt_util
 
-from .api import NextEnergyAuthError, NextEnergyClient, NextEnergyError
+from .api import NextEnergyClient, NextEnergyError
 from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
@@ -27,7 +27,12 @@ _LOGGER = logging.getLogger(__name__)
 class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Pull both price flavours plus the forecast on every refresh."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        session: aiohttp.ClientSession,
+    ) -> None:
         interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         super().__init__(
             hass,
@@ -35,16 +40,17 @@ class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=DOMAIN,
             update_interval=timedelta(seconds=interval),
         )
-        self._client = NextEnergyClient(async_get_clientsession(hass))
+        self._client = NextEnergyClient(session)
 
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().date()
         try:
             all_in = await self._client.fetch_market_prices(today, PRICE_LEVEL_TOTAL)
             market = await self._client.fetch_market_prices(today, PRICE_LEVEL_MARKET)
-        except NextEnergyAuthError as err:
-            raise ConfigEntryAuthFailed(str(err)) from err
         except NextEnergyError as err:
+            # No credentials to re-enter — both bootstrap failures and transient
+            # API errors are treated as UpdateFailed. The client invalidates its
+            # session on 4xx, so the next refresh will re-bootstrap automatically.
             raise UpdateFailed(str(err)) from err
 
         # Forecast endpoint is supplementary — degrade gracefully if it fails.
