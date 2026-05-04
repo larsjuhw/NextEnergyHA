@@ -17,6 +17,8 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    EVENT_REFRESH_FAILED,
+    EVENT_REFRESHED,
     PRICE_LEVEL_MARKET,
     PRICE_LEVEL_TOTAL,
 )
@@ -41,6 +43,7 @@ class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=interval),
         )
         self._client = NextEnergyClient(session)
+        self._entry_id = entry.entry_id
 
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().date()
@@ -51,16 +54,31 @@ class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # No credentials to re-enter — both bootstrap failures and transient
             # API errors are treated as UpdateFailed. The client invalidates its
             # session on 4xx, so the next refresh will re-bootstrap automatically.
+            self.hass.bus.async_fire(
+                EVENT_REFRESH_FAILED,
+                {"entry_id": self._entry_id, "error": str(err)},
+            )
             raise UpdateFailed(str(err)) from err
 
         # Forecast endpoint is supplementary — degrade gracefully if it fails.
         forecast: dict[str, Any] | None = None
+        forecast_error: str | None = None
         try:
             forecast = await self._client.fetch_forecast(today)
         except NextEnergyError as err:
+            forecast_error = str(err)
             _LOGGER.debug("Forecast fetch failed (non-fatal): %s", err)
 
         now_utc = dt_util.utcnow()
+        self.hass.bus.async_fire(
+            EVENT_REFRESHED,
+            {
+                "entry_id": self._entry_id,
+                "fetched_at": now_utc.isoformat(),
+                "forecast_ok": forecast is not None,
+                "forecast_error": forecast_error,
+            },
+        )
         return {
             "all_in": _process_quarterly(all_in, now_utc),
             "market": _process_quarterly(market, now_utc),

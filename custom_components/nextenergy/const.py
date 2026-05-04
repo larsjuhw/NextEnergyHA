@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "nextenergy"
-PLATFORMS: list[str] = ["sensor"]
+PLATFORMS: list[str] = ["sensor", "button"]
 
 BASE_URL = "https://mijn.nextenergy.nl"
 PORTAL_URL = f"{BASE_URL}/Mobile_EnergyNext/MarketPrices"
@@ -47,7 +47,10 @@ MAX_UPDATE_INTERVAL = 21600
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_LANGUAGE = "language"
 
-DEFAULT_LANGUAGE = "EN"
+EVENT_REFRESHED = "nextenergy_refreshed"
+EVENT_REFRESH_FAILED = "nextenergy_refresh_failed"
+
+DEFAULT_LANGUAGE = "NL"
 SUPPORTED_LANGUAGES = ["EN", "NL"]
 
 PRICE_LEVEL_TOTAL = "TotalPrice"
