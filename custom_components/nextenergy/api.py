@@ -79,6 +79,9 @@ class NextEnergyClient:
         self._csrf_token: str | None = None
         self._lock = asyncio.Lock()
 
+    async def aclose(self) -> None:
+        await self._session.close()
+
     async def fetch_market_prices(
         self,
         for_date: date,
@@ -303,7 +306,8 @@ class NextEnergyClient:
         return match.group(1) if match else None
 
     def _headers(self) -> dict[str, str]:
-        assert self._csrf_token is not None
+        if self._csrf_token is None:
+            raise NextEnergyError("CSRF token missing; session not bootstrapped")
         return {
             "User-Agent": _USER_AGENT,
             "Accept": "application/json",

@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 import homeassistant.util.dt as dt_util
 
@@ -22,8 +23,20 @@ from .const import (
     PRICE_LEVEL_MARKET,
     PRICE_LEVEL_TOTAL,
 )
+from .processing import _process_forecast, _process_quarterly
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Shared device descriptor for all NextEnergy entities."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="NextEnergy",
+        manufacturer="NextEnergy",
+        model="Market prices",
+        configuration_url="https://mijn.nextenergy.nl/",
+    )
 
 
 class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -44,6 +57,10 @@ class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._client = NextEnergyClient(session)
         self._entry_id = entry.entry_id
+
+    async def async_close(self) -> None:
+        """Close the underlying HTTP session on unload."""
+        await self._client.aclose()
 
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().date()
@@ -85,79 +102,3 @@ class NextEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "forecast": _process_forecast(forecast),
             "fetched_at": now_utc,
         }
-
-
-def _process_quarterly(data: dict[str, Any], now_utc: datetime) -> dict[str, Any]:
-    """Reduce one quarterly response to current/next/curve."""
-    raw_points = ((data.get("DataPoints") or {}).get("List")) or []
-    parsed: list[tuple[int, float]] = []
-    for point in raw_points:
-        try:
-            parsed.append((int(point["Label"]), float(point["Value"])))
-        except (KeyError, TypeError, ValueError):
-            continue
-
-    # The list is chronological; Labels are UTC clock-hours ("0".."23").
-    # Anchor on the entry whose Label matches the current UTC hour so we can
-    # reconstruct an absolute timestamp for every point in the curve.
-    current_utc_hour = now_utc.hour
-    anchor_idx: int | None = next(
-        (i for i, (h, _) in enumerate(parsed) if h == current_utc_hour),
-        None,
-    )
-
-    curve: list[dict[str, Any]] = []
-    if anchor_idx is not None:
-        anchor_ts = now_utc.replace(minute=0, second=0, microsecond=0)
-        for i, (_, price) in enumerate(parsed):
-            ts = anchor_ts + timedelta(hours=(i - anchor_idx))
-            curve.append({"start": ts.isoformat(), "price": price})
-    else:
-        for label, price in parsed:
-            curve.append({"start": None, "label_utc_hour": label, "price": price})
-
-    next_price: float | None = None
-    if anchor_idx is not None and anchor_idx + 1 < len(parsed):
-        next_price = parsed[anchor_idx + 1][1]
-
-    return {
-        "current": _safe_float(data.get("CurrentElectricityPrice")),
-        "next": next_price,
-        "average": _safe_float(data.get("AvgElectricityPrice")),
-        "average_precise": _safe_float(data.get("PriceKwhAvg")),
-        "current_gas": _safe_float(data.get("CurrentGasPrice")),
-        "curve": curve,
-    }
-
-
-def _process_forecast(data: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not data:
-        return None
-    forecast_window = data.get("Forecast_Window") or {}
-    cheapest = data.get("Cheapest_Window") or {}
-    return {
-        "forecast_start": forecast_window.get("Start_time"),
-        "forecast_duration_hours": _safe_int(forecast_window.get("Duration_hours")),
-        "cheapest_start": cheapest.get("Start_time"),
-        "cheapest_duration_hours": _safe_int(cheapest.get("Duration_hours")),
-        "next_execution_time": data.get("Next_Execution_Time"),
-        "ai_sentences": data.get("AI_Sentences"),
-    }
-
-
-def _safe_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _safe_int(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None

@@ -4,11 +4,11 @@ from __future__ import annotations
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import NextEnergyCoordinator
+from .coordinator import NextEnergyCoordinator, device_info
 
 
 async def async_setup_entry(
@@ -31,13 +31,7 @@ class NextEnergyRefreshButton(ButtonEntity):
     ) -> None:
         self._coordinator = coordinator
         self._attr_unique_id = f"{entry.entry_id}_refresh"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="NextEnergy",
-            manufacturer="NextEnergy",
-            model="Market prices",
-            configuration_url="https://mijn.nextenergy.nl/",
-        )
+        self._attr_device_info = device_info(entry)
 
     async def async_press(self) -> None:
         await self._coordinator.async_request_refresh()
