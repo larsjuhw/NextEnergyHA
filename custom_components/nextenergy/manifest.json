@@ -1,13 +1,13 @@
 {
   "domain": "nextenergy",
   "name": "NextEnergy Market Prices",
-  "version": "0.1.1",
-  "documentation": "https://github.com/larsjuhw/NextEnergyHA",
-  "issue_tracker": "https://github.com/larsjuhw/NextEnergyHA/issues",
   "codeowners": ["@larsjuhw"],
   "config_flow": true,
-  "iot_class": "cloud_polling",
+  "dependencies": [],
+  "documentation": "https://github.com/larsjuhw/NextEnergyHA",
   "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/larsjuhw/NextEnergyHA/issues",
   "requirements": [],
-  "dependencies": []
+  "version": "0.2.0"
 }

@@ -15,12 +15,12 @@ Lifecycle:
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import logging
 import re
-import uuid
-from datetime import date
 from typing import Any
 from urllib.parse import unquote
+import uuid
 
 import aiohttp
 from yarl import URL
@@ -78,6 +78,9 @@ class NextEnergyClient:
         self._session = session
         self._csrf_token: str | None = None
         self._lock = asyncio.Lock()
+
+    async def aclose(self) -> None:
+        await self._session.close()
 
     async def fetch_market_prices(
         self,
@@ -210,9 +213,13 @@ class NextEnergyClient:
             ) as resp:
                 set_cookie_headers = resp.headers.getall("Set-Cookie", [])
                 body = await resp.text(errors="replace")
+                cookie_names = [
+                    h.split(";", 1)[0].split("=", 1)[0].strip()
+                    for h in set_cookie_headers
+                ]
                 probe_log.append(
                     f"GET {MODULEINFO_URL} -> {resp.status}; "
-                    f"Set-Cookie: {[h.split(';',1)[0].split('=',1)[0].strip() for h in set_cookie_headers] or 'none'}; "
+                    f"Set-Cookie: {cookie_names or 'none'}; "
                     f"body_len={len(body)}; body[:600]={body[:600]!r}"
                 )
                 token = self._extract_csrf() or _extract_csrf_from_json_text(body)
@@ -303,7 +310,8 @@ class NextEnergyClient:
         return match.group(1) if match else None
 
     def _headers(self) -> dict[str, str]:
-        assert self._csrf_token is not None
+        if self._csrf_token is None:
+            raise NextEnergyError("CSRF token missing; session not bootstrapped")
         return {
             "User-Agent": _USER_AGENT,
             "Accept": "application/json",

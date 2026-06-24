@@ -14,13 +14,12 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import homeassistant.util.dt as dt_util
 
 from .const import CONF_LANGUAGE, DEFAULT_LANGUAGE, DOMAIN
-from .coordinator import NextEnergyCoordinator
+from .coordinator import NextEnergyCoordinator, device_info
 
 PRICE_UNIT = "EUR/kWh"
 GAS_UNIT = "EUR/m³"
@@ -113,23 +112,13 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="NextEnergy",
-        manufacturer="NextEnergy",
-        model="Market prices",
-        configuration_url="https://mijn.nextenergy.nl/",
-    )
-
-
 class _BaseEntity(CoordinatorEntity[NextEnergyCoordinator], SensorEntity):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: NextEnergyCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
 
 class NextEnergyPriceSensor(_BaseEntity):
